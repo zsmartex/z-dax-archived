@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  peatio:
+    image: "<%= @config['images']['peatio'] %>"
+    restart: always
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_rails_token'] %>
+    env_file:
+      - ../config/peatio.env
+    volumes:
+      - ../config/peatio/seed:/home/app/config/seed:ro
+      - ../config/peatio/management_api.yml:/home/app/config/management_api.yml:ro
+    command: bash -c "bin/link_config && bundle exec puma --config config/puma.rb"
+
+  barong:
+    image: "<%= @config['images']['barong'] %>"
+    env_file:
+      - ../config/barong.env
+    volumes:
+      - ../config/secrets:/secrets:ro
+      - ../config/barong/seeds.yml:/home/app/config/seeds.yml:ro
+      - ../config/barong/barong.yml:/home/app/config/barong.yml:ro
+      - ../config/barong/authz_rules.yml:/home/app/config/authz_rules.yml:ro
+      - ../config/barong/management_api.yml:/home/app/config/management_api.yml:ro
+
+  finex-api:
+    image: "<%= @utils['images']['finex'] %>"
+    restart: always
+    env_file:
+      - ../config/finex.env
+    volumes:
+      - ../config/finex/config.yaml:/app/config/config.yaml
+    command: "./finex-api"
+
+  rango:
+    image: "<%= @config['images']['rango'] %>"
+    restart: always
+    env_file:
+      - ../config/rango.env
+
+  applogic:
+    image: "<%= @utils['images']['applogic'] %>"
+    restart: always
+    volumes:
+      - ../config/applogic/management_api.yml:/home/app/config/management_api.yml:ro
+      - ../data/applogic/banners:/home/app/banners
+    env_file:
+      - ../config/applogic.env
+    command: "./bin/applogic-api"
+
+  coverapp:
+    image: "<%= @config['images']['coverapp'] %>"
+    restart: always
+    labels:
+      - "traefik.http.routers.coverapp-<%= @name %>.rule=Host(`<%= @config['app']['subdomain'] %>.<%= @config['app']['domain'] %>`) && PathPrefix(`/`)"
+      - "traefik.http.services.coverapp-<%= @name %>.loadbalancer.server.port=3000"
+      - "traefik.enable=true"
+      <%- if @config['ssl']['enabled'] -%>
+      - "traefik.http.routers.coverapp-<%= @name %>.entrypoints=websecure"
+      - "traefik.http.routers.coverapp-<%= @name %>.tls=true"
+      <%- else -%>
+      - "traefik.http.routers.coverapp-<%= @name %>.entrypoints=web"
+      <%- end -%>
+
+  castle:
+    image: "<%= @config['images']['castle'] %>"
+    restart: always
+    labels:
+      - "traefik.http.routers.castle-<%= @name %>.rule=Host(`<%= @config['app']['subdomain'] %>.<%= @config['app']['domain'] %>`) && PathPrefix(`/castle`)"
+      - "traefik.http.services.castle-<%= @name %>.loadbalancer.server.port=80"
+      - "traefik.enable=true"
+      <%- if @config['ssl']['enabled'] -%>
+      - "traefik.http.routers.castle-<%= @name %>.entrypoints=websecure"
+      - "traefik.http.routers.castle-<%= @name %>.tls=true"
+      <%- else -%>
+      - "traefik.http.routers.castle-<%= @name %>.entrypoints=web"
+      <%- end -%>
+
+  assets-currency:
+    image: nginx:stable
+    restart: always
+    volumes:
+      - ../config/nginx/config.conf:/etc/nginx/nginx.conf:ro
+      - ../data/assets-currency:/var/www/html/assets-currency:ro
+    labels:
+      - "traefik.http.routers.assets-currency-<%= @name %>.rule=Host(`<%= @config['app']['subdomain'] %>.<%= @config['app']['domain'] %>`) && PathPrefix(`/assets-currency`)"
+      - "traefik.http.services.assets-currency-<%= @name %>.loadbalancer.server.port=80"
+      - "traefik.enable=true"
+      <%- if @config['ssl']['enabled'] -%>
+      - "traefik.http.routers.assets-currency-<%= @name %>.entrypoints=websecure"
+      - "traefik.http.routers.assets-currency-<%= @name %>.tls=true"
+      <%- else -%>
+      - "traefik.http.routers.assets-currency-<%= @name %>.entrypoints=web"
+      <%- end -%>

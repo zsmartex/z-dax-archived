@@ -1,0 +1,137 @@
+version: '3.8'
+
+x-daemon: &peatio-daemon
+  image: "<%= @config['images']['peatio'] %>"
+  restart: always
+  env_file:
+    - ../config/peatio.env
+  volumes:
+    - ../config/peatio/seed:/home/app/config/seed
+
+x-finex-daemon: &finex-daemon
+  image: "<%= @utils['images']['finex'] %>"
+  restart: always
+  env_file:
+    - ../config/finex.env
+  volumes:
+    - ../config/finex/config.yaml:/app/config/config.yaml
+
+services:
+<% if @config['daemons']['blockchain'] -%>
+  blockchain:
+    << : *peatio-daemon
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_crypto_token'] %>
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/daemons.rb blockchain"
+<% end -%>
+
+<% if @config['daemons']['peatio_cron_job'] -%>
+  peatio_cron_job:
+    << : *peatio-daemon
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_crypto_token'] %>
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/daemons.rb cron_job"
+<% end -%>
+
+<% if @config['daemons']['finex_cron_job'] -%>
+  finex_cron_job:
+    << : *finex-daemon
+    command: "./finex-daemon cron_job"
+<% end -%>
+
+<% if @config['daemons']['deposit'] -%>
+  deposit:
+    << : *peatio-daemon
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_crypto_token'] %>
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/daemons.rb deposit"
+<% end -%>
+
+<% if @config['daemons']['upstream'] -%>
+  upstream:
+    << : *peatio-daemon
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_upstream_token'] %>
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/daemons.rb upstream"
+<% end -%>
+
+<% if @config['daemons']['deposit_coin_address'] -%>
+  deposit_coin_address:
+    << : *peatio-daemon
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_crypto_token'] %>
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/stream_daemon.rb deposit_coin_address"
+<% end -%>
+
+<% if @config['daemons']['market_ticker'] -%>
+  market_ticker:
+    << : *peatio-daemon
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/stream_daemon.rb market_ticker"
+<% end -%>
+
+<% if @config['daemons']['trade_executor'] -%>
+  trade_executor:
+    << : *finex-daemon
+    command: "./finex-engine trade_executor"
+<% end %>
+
+<% if @config['daemons']['matching'] -%>
+  matching:
+    << : *finex-daemon
+    command: "./finex-matching-engine"
+<% end %>
+
+<% if @config['daemons']['order_processor'] -%>
+  order_processor:
+    << : *finex-daemon
+    depends_on:
+      - matching
+    command: "./finex-engine order_processor"
+<% end %>
+
+<% if @config['daemons']['ieo_order_processor'] -%>
+  ieo_order_processor:
+    << : *finex-daemon
+    depends_on:
+      - ieo_order_executor
+    command: "./finex-engine ieo_order_processor"
+<% end %>
+
+<% if @config['daemons']['ieo_order_executor'] -%>
+  ieo_order_executor:
+    << : *finex-daemon
+    command: "./finex-engine ieo_order_executor"
+<% end %>
+
+<% if @config['daemons']['withdraw_coin'] -%>
+  withdraw_coin:
+    << : *peatio-daemon
+    environment:
+      - VAULT_TOKEN=<%= @config['vault']['peatio_crypto_token'] %>
+    command: bash -c "bin/link_config && bundle exec ruby lib/daemons/stream_daemon.rb withdraw_coin"
+<% end -%>
+
+  mailer:
+    restart: always
+    image: "<%= @config['images']['barong'] %>"
+    env_file:
+      - ../config/barong.env
+    volumes:
+      -  ../config/secrets:/secrets:ro
+      -  ../config/mailer/layouts/mailer.html.erb:/home/app/app/views/layouts/mailer.html.erb
+      -  ../config/mailer/postmaster:/home/app/app/views/postmaster
+      -  ../config/mailer.yml:/home/app/config/mailer.yml
+    command: bash -c "bin/mailer run"
+
+  sidekiq:
+    restart: always
+    image: "<%= @config['images']['barong'] %>"
+    env_file:
+      - ../config/barong.env
+    volumes:
+      - ../config/secrets:/secrets
+      - ../config/barong/seeds.yml:/home/app/config/seeds.yml
+      - ../config/barong/barong.yml:/home/app/config/barong.yml
+      - ../config/barong/authz_rules.yml:/home/app/config/authz_rules.yml
+      - ../config/barong/management_api.yml:/home/app/config/management_api.yml
+    command: bash -c "bundle exec sidekiq"

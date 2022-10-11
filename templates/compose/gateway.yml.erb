@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  envoy:
+    image: envoyproxy/envoy:v1.21-latest
+    restart: always
+    volumes:
+      - ../config/gateway/envoy.yaml:/etc/envoy/envoy.yaml
+    command: /usr/local/bin/envoy -l info -c /etc/envoy/envoy.yaml
+    labels:
+      - "traefik.http.routers.gateway-<%= @name %>.rule=Host(`<%= @config['app']['subdomain'] %>.<%= @config['app']['domain'] %>`) && PathPrefix(`/api`)"
+      - "traefik.http.services.gateway-<%= @name %>.loadbalancer.server.port=8099"
+      - "traefik.enable=true"
+      <%- if @config['ssl']['enabled'] -%>
+      - "traefik.http.routers.gateway-<%= @name %>.entrypoints=websecure"
+      - "traefik.http.routers.gateway-<%= @name %>.tls=true"
+      <%- else -%>
+      - "traefik.http.routers.gateway-<%= @name %>.entrypoints=web"
+      <%- end -%>
