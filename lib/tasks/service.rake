@@ -32,7 +32,7 @@ namespace :service do
 
   desc 'Run backend'
   task :backend, [:command] do |task, args|
-    @backend_services = %w[zookeeper kafka elasticsearch kafka-schema-registry kafka-rest-proxy kafka-connect ksqldb-server control-center kibana db redis influxdb vault]
+    @backend_services = %w[zookeeper kafka db redis influxdb vault]
 
     args.with_defaults(:command => 'start')
 
